@@ -1,7 +1,25 @@
 <?php
 date_default_timezone_set('America/Chicago');
-File::$home = 'photos';
-File::$forReal = true; // are we allowed to make changes?
+
+// Error handling
+if ( !isset($argv[1]) || empty(trim($argv[1])) ) {
+  echo "Please specify a folder to organize. Usage: folder [-real] [-duplicates]\n";
+  exit(1);
+}
+
+if ( !file_exists($argv[1]) ) {
+  echo "Sorry, I could not find the '".$argv[1]."' folder to organize.\n";
+  exit(1);
+}
+
+
+
+File::$home = $argv[1];
+
+if ( in_array('-real',$argv) ) File::$forReal = true; // are we allowed to make changes?
+else File::$forReal = false;
+if ( in_array('-duplicates',$argv) ) File::$resolveDuplicates = true; // are we allowed
+else File::$resolveDuplicates = false;
 
 $file = new File ( File::$home );
 //print_r($file); die();
@@ -17,6 +35,7 @@ echo "\n---------------\n".intval($num)." files moved.\n\n";
 
 // summary
 echo "---------- Action Summary\n";
+echo File::$resolvedDuplicates." duplicate files were resolved.\n";
 echo File::$deletedFiles." unnecessary files were removed.\n";
 echo File::$deletedDirectories." empty folders were removed.\n";
 echo "There were    ".$stats['files'].' files in '.$stats['directories']." directories.\n";
@@ -32,6 +51,8 @@ class File {
   public static $filesToIgnore = array('.','..','organizePhotos.php','.git');
   public static $filesToDelete = array('desktop.ini','.DS_Store');
   public static $forReal = false;
+  public static $resolveDuplicates = false;
+  public static $resolvedDuplicates = 0;
   public static $deletedFiles = 0;
   public static $deletedDirectories = 0;
 
@@ -74,7 +95,7 @@ class File {
          if ( $file->type == 'file' ) $stats['files']++;
          if ( $file->type == 'dir' ) {
            $stats['directories']++;
-           $stats2 = $file->getStats();
+           $stats2 = $file->getStats($quiet);
            $stats['files'] += $stats2['files'];
            $stats['directories'] += $stats2['directories'];
          }
@@ -195,21 +216,28 @@ class File {
          }
 
          // How could it already be there?
-         if ( $this->fileName != $newPath.$file && file_exists($newPath.$file) ) {
+         if ( $this->fileName == $newPath.$file ) {
+           echo " already where it needs to be.\n";
+         } else if ( file_exists($newPath.$file) ) {
+           //echo " FAILED: already a file there with the same name!\n";
              //echo "\n\tInvestigating duplicate file...";
              // the file names and dates are the same - we know that
              if (filesize($newPath . $file) == filesize($this->fileName)) {
                 if ( md5(file_get_contents($newPath.$file)) == md5(file_get_contents($this->fileName) ) ) {
-                   echo " duplicate file resolved...";
-                   if ( unlink($this->fileName) ) {
-                      echo " done.\n";
-                      return 1;
+                   echo " duplicate file";
+                   if ( File::$forReal && File::$resolveDuplicates ) {
+                     if ( unlink($this->fileName) ) {
+                       echo " resolved.\n";
+                       File::$resolvedDuplicates++;
+                       return 1;
+                     } else {
+                       echo " could not be resolved.\n";
+                     }
                    } else {
-                      echo " FAILED!\n";
+                      echo " still exists!\n";
                       return false;
                    }
                 }
-
             }
 
             // the files are named the same, so rename and then copy over
