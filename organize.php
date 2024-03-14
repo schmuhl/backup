@@ -1,163 +1,360 @@
 <?php
-date_default_timezone_set('America/Denver');
+date_default_timezone_set('America/Chicago');
 
-
-
-// parse the command line parameters
-$path = '/Volumes/SCHMACKUP/Memories/'; //"Sort These".DIRECTORY_SEPARATOR;
-$organizedPath = '/Volumes/SCHMACKUP/Memories/'; //".".DIRECTORY_SEPARATOR;
-$really = true; // mode 1/true means that we'll actually make changes
-
-
-
-
-
-echo "Organizing the media files in '$path' ...\n";
-if ( !$really ) echo "Only running in analysis mode.\n";
-
-
-
-$files = array();
-
-// get all of the files under that path
-if ( !file_exists($path) ) die("Could not find path '$path'\n");
-$rii = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path));
-foreach ($rii as $file) {
-  if ( $file->isDir() ) continue;
-  $files[] = $file->getPathname();
+// Error handling
+if ( !isset($argv[1]) || empty(trim($argv[1])) ) {
+  echo "Please specify a folder to organize. Usage: folder [-move] [-duplicates]\n";
+  exit(1);
 }
-//print_r($files);die();
+
+if ( !file_exists($argv[1]) ) {
+  echo "Sorry, I could not find the '".$argv[1]."' folder to organize.\n";
+  exit(1);
+}
+
+
+// set the parameters
+File::$home = $argv[1];
+if ( in_array('-move',$argv) ) File::$move = true; // are we allowed to make changes?
+else File::$move = false;
+File::$prune = File::$move;
+if ( in_array('-duplicates',$argv) ) File::$resolveDuplicates = true; // are we allowed
+else File::$resolveDuplicates = false;
+
+echo "Scanning '".File::$home."' ...\n";
+$file = new File ( File::$home );
+//print_r($file); die();
+
+echo "---------- Photo Folder Summary:\n";
+$stats = $file->getStats(false); //die();
+echo "\n\n";
+
+$pruned = $file->pruneEmptyDirectories();
+$organized = $file->organize();
+$duplicates = $file->handleDuplicates();
 
 
 
-echo "Looking at ".count($files)." files...\n";
+
+// summary
+echo "---------- Action Summary\n";
+echo "$organized files were organized.\n";
+echo "$duplicates duplicate files were resolved.\n";
+echo File::$deletedFiles." unnecessary files were pruned.\n";
+echo "$pruned empty folders were removed.\n";
+echo "There were    ".$stats['files'].' files in '.$stats['directories']." directories.\n";
+if ( File::$move ) { // only meaningful if changes were made
+  $file2 = new File ( File::$home );
+  $stats2 = $file2->getStats();
+  echo "There are now ".$stats2['files'].' files in '.$stats2['directories']." directories.\n\n";
+}
 
 
 
-// initialize counters
-$validFiles = 0;
-$moves = 0;
-$failedMoves = 0;
-$newDirectories = 0;
-$duplicates = 0;
-$notDuplicates = 0;
+class File {
+
+  public static $home;
+  public static $filesToIgnore = array('.','..','organizePhotos.php','.git');
+  public static $filesToDelete = array('desktop.ini','.DS_Store','.picasa.ini','Picasa.ini');
+  public static $move = false;
+  public static $prune = false;
+  public static $resolveDuplicates = false;
+
+  public static $movedFiles = 0;
+  public static $deletedFiles = 0;
+  public static $deletedDirectories = 0;
+
+  public $fileName;
+  public $data;
+  public $type;
+  public $size;
+  public $md5;
+
+  public $directoryContents;
+  public $taken;  // photo taken date
 
 
-// loop through the results
-foreach ( $files as $file ) {
-
-  // skip the directories
-  if ( is_dir($file) ) {
-    echo "Looking at directory: '$file'...\n";
-    continue;
-  }
-
-
-  // get info about this file
-  $result = getFileData($file);
-  //print_r($result); die();
-
-
-  if ( $result ) {
-      echo "Looking at '$file'...";
-
-
-      // files we know we can Skip
-      if ( in_array($result['FileName'], array('.DS_Store', 'Desktop.ini')) || preg_match("`^\._`",$result['FileName']) ) {
-        echo " ignorable file. Skip.\n";
-        continue;
+   public function __construct ( $path ) {
+      //echo "Looking at file $path ...\n";
+      if ( !file_exists($path) ) return;
+      $this->taken = null;
+      $this->fileName = $path;
+      $this->data = @exif_read_data($path);
+      if ( is_array($this->data) ) {
+         //print_r($this->data); die();
+         if ( isset($this->data['DateTimeOriginal']) && !empty($this->data['DateTimeOriginal']) )
+            $this->taken = strtotime($this->data['DateTimeOriginal']);
+         else if ( isset($this->data['FileDateTime']) && !empty($this->data['FileDateTime']) )
+            $this->taken = $this->data['FileDateTime'];
       }
 
+      if ( !is_numeric($this->taken) || $this->taken < 1 || !isset($this->taken) )
+         $this->taken = filectime($path); //null;
 
-      // validate--need a valid date
-      if ( !isset($result['FileDateTime']) || $result['FileDateTime'] == 0 ) {
-        echo " no valid file date. Skip.\n";
-        continue; // need a valid date
+      $this->type = filetype($path);
+      if ( $this->type == 'dir' ) $this->directoryContents = $this->getDirectoryContents();
+   }
+
+
+   public function getStats ( $quiet=true ) {
+     $stats = array();
+     $stats['files'] = 0;
+     $stats['directories'] = 0;
+     if ( is_array($this->directoryContents) ) {
+       foreach ( $this->directoryContents as $file ) {  // loop through the directory
+         if ( $file->type == 'file' ) $stats['files']++;
+         if ( $file->type == 'dir' ) {
+           $stats['directories']++;
+           $stats2 = $file->getStats($quiet);
+           $stats['files'] += $stats2['files'];
+           $stats['directories'] += $stats2['directories'];
+         }
+       }
+     }
+     if ( $quiet==false ) echo "$this->fileName has ".$stats['files']." files and ".$stats['directories']." directories.\n";
+     return $stats;
+   }
+
+
+   public function getDirectoryContents () {
+      $return = array();
+      $files = scandir($this->fileName);
+      //echo "Getting directory contents of $this->fileName...\n";
+      foreach ( $files as $file ) {
+         if ( in_array($file,File::$filesToIgnore) ) continue;
+         $return []= new File ($this->fileName.DIRECTORY_SEPARATOR.$file);
       }
-
-      echo " taken on ".date("Y-m-d",$result['FileDateTime'])." ...";
-
-      $validFiles++;
-
-      // Create the new path
-      $newPath = $organizedPath.date("Y",$result['FileDateTime']).DIRECTORY_SEPARATOR.date("Y-m",$result['FileDateTime']).DIRECTORY_SEPARATOR;
-
-      if ( $newPath.$result['FileName'] == $file ) {
-        echo " Already good.\n";
-        continue;
-      }
+      $this->directoryContents = $return;
+      return $return;
+   }
 
 
-      // Create the newPath directory, if needed
-      if ( !file_exists($newPath) ) {
-          echo "\n\tCREATING DIRECTORY '$newPath' ...";
-          if ( $really && mkdir($newPath,0777,true) ) {
-            echo " DONE.\n";
-            $newDirectories++;
-          } else echo " FAILED.\n";
-      }
-
-
-      echo "\n\tMOVE TO '$newPath' ...";
-      // How could it already be there?
-      if ( file_exists($newPath.$result['FileName']) ) {
-          if (
-            filesize($newPath.$result['FileName']) == filesize($file) // Same filesize
-            //&& md5($newPath.$result['FileName']) == md5($file) // same content @todo md5(file_get_contents($file))
-          ) {
-              echo " DUPLICATE\n";
-              // delete one?
-              die("\n\n'Should delete one of these files?\n$file'\n'$newPath".$result['FileName']."'\n\n");
-              $duplicates++;
-              continue;
-          } else {
-              echo " DIFFERENT and ";
-              $notDuplicates++;
-              $new = substr($result['FileName'],0,strrpos($result['FileName'],'.')).' 2'.substr($result['FileName'],strrpos($result['FileName'],'.'));
-              $result['FileName'] = $new;
-              //continue;
+  public function pruneEmptyDirectories () {
+    // attempt to remove unwanted files
+    if ( $this->type != 'dir' ) {
+      // is this a file we don't want?
+      $f = explode(DIRECTORY_SEPARATOR,$this->fileName);
+      $f = $f[count($f)-1];
+      //die("File is $f");
+      if ( in_array($f,File::$filesToDelete) ) {
+        if ( File::$prune ) {
+          echo "\tRemoving file $f ...";
+          if ( $this->delete() ) {
+            File::$deletedFiles++;
+            echo " done.\n";
+            return 0;
           }
+          else echo " ERROR!\n";
+        } else {
+          echo "\tNOT removing file $this->fileName\n";
+          return 0;
+        }
       }
 
+      //echo "\t$this->fileName file found!\n";
+      return 0;
+    }
 
-      // Attempt to move the file
-      if ( $really && rename($file,$newPath.$result['FileName']) ) {
-          echo " MOVED!!!\n";
-          $moves++;
-      } else {
-          echo "Could not move from '$file' to '$newPath".$result['FileName']."'\n";
-          $failedMoves++;
+    // recurse
+    $hasFiles = 0;
+    foreach ( $this->directoryContents as $f ) {
+      $hasFiles += $f->pruneEmptyDirectories();
+      //echo "\t$file->fileName\n";
+    }
+
+    // Attempt to prune this direcotry
+    //if ( $hasFiles > 0 ) echo "$this->fileName has $hasFiles files and cannot be pruned.\n";
+    if ( $hasFiles <= 0 ) {
+      if ( is_array($this->directoryContents) && count($this->directoryContents) > 0 ) return $hasFiles;  // can't delete a directory with stuff in it!
+      echo "Pruning $this->fileName ...";
+      if ( File::$prune ) {
+        if ( is_dir($this->fileName) && $this->fileName != './' ) {
+          if ( !rmdir($this->fileName) ) echo " FAILED!\n";
+          else {  // successfully removed empty directory
+            //File::$deletedDirectories++;
+            echo " done.\n";
+            return 1;
+          }
+        } else echo " this is not a directory.\n";
+      } else echo " NOT pruned.\n";
+    }
+
+    return 0;
+  }
+
+
+   public function organize () {
+      $num = 0;
+      if ( $this->type == 'dir' ) { // directory? then recurse!
+        if ( $this->fileName == FILE::$home.DIRECTORY_SEPARATOR.'Trash' ) return 0; // don't process the trash
+
+         foreach ( $this->directoryContents as $file ) {
+            $num += $file->organize();
+         }
+         return $num;
+      } else {  // leaf/edge, handle the move, if possible
+
+        // check if this is a file that should have been deleted or ignored
+        $file = explode(DIRECTORY_SEPARATOR,$this->fileName);
+        $file = $file[count($file)-1];
+        if ( in_array($file,File::$filesToDelete) || in_array($file,File::$filesToIgnore) ) {
+          echo "Organizing $this->fileName and skipping because it should be deleted or ignored.\n";
+          return 0;
+        }
+
+         //echo "Organizing $this->fileName";
+         if ( !isset($this->taken) ) {
+            echo "Organizing $this->fileName and skipping because of unknown date!\n";
+            return 0;
+         }
+         //echo " (taken ".date("Y-m-d",$this->taken).") ...";
+
+         // Create the new path
+         $path = File::$home.'/';
+         $newPath = $path.date("Y",$this->taken).DIRECTORY_SEPARATOR.date("Y-m",$this->taken).DIRECTORY_SEPARATOR;
+         $file = explode(DIRECTORY_SEPARATOR,$this->fileName);
+         $file = $file[sizeof($file)-1];
+
+         // already where it needs to be?
+         if ( $this->fileName == $newPath.$file ) {
+            //echo " already OK\n";
+            return 0;
+         }
+
+         echo "Organizing $this->fileName ..."; // (taken ".date("Y-m-d",$this->taken).") ...";
+         echo " MOVE TO $newPath ...";
+
+         // Create the new directory, if needed
+         if ( !file_exists($newPath) ) {
+             echo "\n\tCREATING DIRECTORY $newPath ...";
+             if ( File::$move ) {
+               if ( mkdir($newPath,0777,true) ) {
+                 echo " done.\n";
+               } else echo " FAILED!\n";
+             } else {
+               echo " not created.\n";
+             }
+         }
+
+         // How could it already be there?
+         if ( $this->fileName == $newPath.$file ) {
+           echo " already where it needs to be.\n";
+         } else if ( file_exists($newPath.$file) ) {
+            // the files are named the same, so rename and then copy over
+            for ( $n=2; $n<10; $n++ ) {
+               $extension = explode('.',$file);
+               $extension = $extension[count($extension)-1];
+               $try = str_replace(".$extension"," $n.$extension",$file);
+               if ( !file_exists($newPath.$try) ) {
+                  $file = $try;
+                  break;
+               }
+            }
+            //echo("\nOK the old name is $this->fileName and the new name is ".$newPath.$file."\n");
+            if ( file_exists($newPath.$file) ) {
+              echo " file already exists there.\n";
+              return 0;
+            }
+         }
+
+
+         // Attempt to move the file
+         if ( File::$move ) {
+           if ( rename($this->fileName,$newPath.$file) ) {
+             echo " done.\n";
+             return 1;
+           } else {
+             echo " FAILED.\n";
+             return 0;
+           }
+         } else {
+           echo " not moved.\n";
+         }
+
+         return 0;
+      }
+   }
+
+
+  public function handleDuplicates ( ) {
+    if ( $this->type != 'dir' ) return 0;
+    if ( $this->fileName == FILE::$home.DIRECTORY_SEPARATOR.'Trash' ) return 0; // don't process the trash
+    //echo "Looking at folder $this->fileName ...\n";
+
+    $duplicates = 0;
+    $this->getDirectoryContents(); // grab a fresh copy
+
+    // get details on all the files in this directory
+    $files = array();
+    foreach ( $this->directoryContents as $child ) {
+      // recurse down into child directories first
+      if ( $child->type == 'dir' ) {
+        $duplicates += $child->handleDuplicates();
+      } else {  // get more file info to determine duplicates
+        $child->md5 = md5(file_get_contents($child->fileName));
+        $child->size = filesize($child->fileName);
+        $files []= $child;
+      }
+    }
+
+    // compare all of the files to each other to find duplicates
+    for ( $i=0; $i<count($files); $i++ ) {
+      if ( $files[$i] == null || ! $files[$i] instanceof File || !file_exists($files[$i]->fileName) ) continue; // file was deleted
+      for ( $j=0; $j<count($files); $j++ ) {
+        if ( $files[$j] == null || $files[$i] == null || !file_exists($files[$j]->fileName) ) continue; // file was deleted
+        // compare files
+        if ( $i != $j && $files[$i]->md5 == $files[$j]->md5 && $files[$i]->size == $files[$j]->size ) {
+          echo "DUPLICATE FILES: ".$files[$i]->fileName." and ".$files[$j]->fileName." ...";
+          if ( FILE::$resolveDuplicates ) {
+
+            // which one has a shorter name?
+            if ( strlen($files[$i]->fileName) < strlen($files[$j]->fileName) ) {
+              $d = $j;
+            } else if ( strlen($files[$i]->fileName) == strlen($files[$j]->fileName) ) {
+              if ( $files[$i]->fileName < $files[$j]->fileName ) $d = $j;
+              else $d = $i;
+            } else $d = $i;
+
+            // delete
+            if ( $files[$d]->delete() ) {
+              $files[$d] = null;
+              echo " Resolved.\n";
+              $duplicates++;
+            } else echo " FAILED.\n";
+          } else {
+            echo " Ignored.\n";
+          }
+        }
+      }
+    }
+
+    return $duplicates;
+  }
+
+
+  public function delete ( $trash = true ) {
+    // here's where I'd like to remove the file from the global $file but I can't figure out how without a map or something
+    if ( !file_exists($this->fileName) ) return true;  // already gone?
+
+    //echo "\nDeleting $this->fileName.\n"; return true;
+
+    // move it to the trash
+    if ( $trash == true ) {
+      // make sure the trash directory exists
+      $newPath = File::$home.DIRECTORY_SEPARATOR.'Trash'.DIRECTORY_SEPARATOR;
+      if ( !file_exists($newPath) ) {
+        if ( !mkdir($newPath,0777,true) ) return false;
       }
 
-
-      //print_r($result);
-      //die();
-  }
-}
-
-
-// Summary details.
-echo "Done. \n\tConsidered ".count($files)." files\n\tLooked at $validFiles valid files\n\tMoved $moves ($failedMoves failed)\n\tCreated $newDirectories new directories";
-echo "\n\tIdentified $duplicates duplicate files\n\tFound $notDuplicates possible duplicates or filename conflicts.\n\n";
-
-
-
-
-
-function getFileData ( $path ) {
-  $info = array();
-
-  // default values, can be overwritten by exif
-  $info['FileDateTime'] = filectime($path);
-  $info['FileName'] = explode(DIRECTORY_SEPARATOR,$path);
-  $info['FileName'] = $info['FileName'][count($info['FileName'])-1];
-  $info['FileSize'] = filesize($path);
-  // file type: audio, video, image, etc.
-
-  $exif = @exif_read_data($path);
-  if ( $exif ) {
-    $info = $exif;
+      // Move the file to the trash
+      $file = explode(DIRECTORY_SEPARATOR,$this->fileName);
+      $file = microtime(true).' -'.$file[sizeof($file)-1];
+      return rename($this->fileName,$newPath.$file);
+    } else {
+      return unlink($this->fileName);  // naw, just delete it
+    }
   }
 
-  return $info;
+
+
 }
