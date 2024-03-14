@@ -39,9 +39,11 @@ echo File::$resolvedDuplicates." duplicate files were resolved.\n";
 echo File::$deletedFiles." unnecessary files were removed.\n";
 echo File::$deletedDirectories." empty folders were removed.\n";
 echo "There were    ".$stats['files'].' files in '.$stats['directories']." directories.\n";
-$file2 = new File ( File::$home );
-$stats2 = $file2->getStats();
-echo "There are now ".$stats2['files'].' files in '.$stats2['directories']." directories.\n\n";
+if ( File::$forReal ) { // only meaningful if changes were made
+  $file2 = new File ( File::$home );
+  $stats2 = $file2->getStats();
+  echo "There are now ".$stats2['files'].' files in '.$stats2['directories']." directories.\n\n";
+}
 
 
 
