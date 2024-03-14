@@ -204,15 +204,19 @@ class File {
             return false;
          }
 
-         echo "Organizing $this->fileName (taken ".date("Y-m-d",$this->taken).") ...";
+         echo "Organizing $this->fileName ..."; // (taken ".date("Y-m-d",$this->taken).") ...";
          echo " MOVE TO $newPath ...";
 
          // Create the new directory, if needed
          if ( !file_exists($newPath) ) {
              echo "\n\tCREATING DIRECTORY $newPath ...";
-             if ( File::$forReal && mkdir($newPath,0777,true) )
-               echo " done.\n";
-             else echo " FAILED!\n";
+             if ( File::$forReal ) {
+               if ( mkdir($newPath,0777,true) ) {
+                 echo " done.\n";
+               } else echo " FAILED!\n";
+             } else {
+               echo " not created.\n";
+             }
          }
 
          // How could it already be there?
@@ -256,14 +260,16 @@ class File {
 
 
          // Attempt to move the file
-         if ( File::$forReal && rename($this->fileName,$newPath.$file) ) {
+         if ( File::$forReal ) {
+           if ( rename($this->fileName,$newPath.$file) ) {
              echo " done.\n";
              return 1;
-         } else if ( File::$forReal ) {
-             die("Could not move from $path to $newPath\n");
+           } else {
+             echo " FAILED.\n";
+             return false;
+           }
          } else {
-            echo "     test, no move.\n";
-            return false;
+           echo " not moved.\n";
          }
 
          return false;
