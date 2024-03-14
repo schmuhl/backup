@@ -13,14 +13,14 @@ if ( !file_exists($argv[1]) ) {
 }
 
 
-
+// set the parameters
 File::$home = $argv[1];
-
 if ( in_array('-real',$argv) ) File::$forReal = true; // are we allowed to make changes?
 else File::$forReal = false;
 if ( in_array('-duplicates',$argv) ) File::$resolveDuplicates = true; // are we allowed
 else File::$resolveDuplicates = false;
 
+echo "Scanning '".File::$home."' ...\n";
 $file = new File ( File::$home );
 //print_r($file); die();
 
@@ -119,8 +119,8 @@ class File {
 
 
   public function pruneEmptyDirectories () {
+    // attempt to remove unwanted files
     if ( $this->type != 'dir' ) {
-
       // is this a file we don't want?
       $file = explode(DIRECTORY_SEPARATOR,$this->fileName);
       $file = $file[count($file)-1];
@@ -144,12 +144,14 @@ class File {
       return 1;
     }
 
+    // recurse
     $hasFiles = 0;
     foreach ( $this->directoryContents as $file ) {
       $hasFiles += $file->pruneEmptyDirectories();
       //echo "\t$file->fileName\n";
     }
 
+    // Attempt to prune this direcotry
     //if ( $hasFiles > 0 ) echo "$this->fileName has $hasFiles files and cannot be pruned.\n";
     if ( $hasFiles <= 0 ) {
       if ( is_array($this->directoryContents) && count($this->directoryContents) > 0 ) return $hasFiles;  // can't delete a directory with stuff in it!
