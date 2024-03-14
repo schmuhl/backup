@@ -139,7 +139,7 @@ class File {
       if ( in_array($f,File::$filesToDelete) ) {
         if ( File::$prune ) {
           echo "\tRemoving file $f ...";
-          if ( $this->delete() ) {
+          if ( $this->delete(false) ) {
             File::$deletedFiles++;
             echo " done.\n";
             return 0;
