@@ -55,7 +55,7 @@ class File {
 
   public static $home;
   public static $filesToIgnore = array('.','..','organizePhotos.php','.git');
-  public static $filesToDelete = array('desktop.ini','.DS_Store','.picasa.ini','Picasa.ini');
+  public static $filesToDelete = array('desktop.ini','.DS_Store','.picasa.ini','.picasa 2.ini','Picasa.ini','Picasa 2.ini');
   public static $move = false;
   public static $prune = false;
   public static $resolveDuplicates = false;
