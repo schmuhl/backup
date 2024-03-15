@@ -3,7 +3,7 @@ date_default_timezone_set('America/Chicago');
 
 // Error handling
 if ( !isset($argv[1]) || empty(trim($argv[1])) ) {
-  echo "Please specify a folder to organize. Usage: folder [-move] [-duplicates]\n";
+  echo "Please specify a folder to organize. Usage: folder [-move] [-prune] [-duplicates]\n";
   exit(1);
 }
 
@@ -17,8 +17,9 @@ if ( !file_exists($argv[1]) ) {
 File::$home = $argv[1];
 if ( in_array('-move',$argv) ) File::$move = true; // are we allowed to make changes?
 else File::$move = false;
-File::$prune = File::$move;
-if ( in_array('-duplicates',$argv) ) File::$resolveDuplicates = true; // are we allowed
+if ( in_array('-prune',$argv) ) File::$prune = true; // are we allowed to remove useless?
+else File::$prune = false;
+if ( in_array('-duplicates',$argv) ) File::$resolveDuplicates = true; // are we allowed to de-dup?
 else File::$resolveDuplicates = false;
 
 echo "Scanning '".File::$home."' ...\n";
