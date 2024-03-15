@@ -38,7 +38,7 @@ echo "$duplicates duplicate files were resolved.\n";
 echo File::$deletedFiles." unnecessary files were pruned.\n";
 echo "$pruned empty folders were removed.\n";
 $stats = $file->getStats(true);
-echo "There were    ".$stats['files'].' files in '.$stats['directories']." directories.\n";
+echo "There were ".$stats['files'].' files in '.$stats['directories']." directories.\n";
 if ( File::$move ) { // only meaningful if changes were made
   $file2 = new File ( File::$home );
   $stats2 = $file2->getStats();
@@ -51,7 +51,7 @@ class File {
 
   public static $home;
   public static $filesToIgnore = array('.','..','organizePhotos.php','.git');
-  public static $filesToPrune = array('desktop.ini','.DS_Store','.picasa.ini','.picasa 2.ini','Picasa.ini','Picasa 2.ini');
+  public static $filesToPrune = array('desktop.ini','.DS_Store','.picasa.ini','.picasa 2.ini','Picasa.ini','Picasa 2.ini','Thumbs.db');
   public static $move = false;
   public static $prune = false;
   public static $resolveDuplicates = false;
@@ -119,7 +119,7 @@ class File {
          if ( in_array($file,File::$filesToIgnore) ) continue;
          $return []= new File ($this->fileName.DIRECTORY_SEPARATOR.$file);
       }
-      echo "Found ".count($return)." items found in $this->fileName \n";
+      echo "Found ".count($return)." items in $this->fileName \n";
       $this->directoryContents = $return;
       return $return;
    }
