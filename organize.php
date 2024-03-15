@@ -34,7 +34,7 @@ echo "\n\n";
 // Execute!
 if ( File::$prune ) $pruned = $file->pruneEmptyDirectories(); else $pruned = 0;
 if ( File::$move ) $organized = $file->organize(); else $organized = 0;
-if ( File::$duplicates ) $duplicates = $file->handleDuplicates(); else $duplicates = 0;
+if ( File::$resolveDuplicates ) $duplicates = $file->handleDuplicates(); else $duplicates = 0;
 
 
 
@@ -122,12 +122,11 @@ class File {
    public function getDirectoryContents () {
       $return = array();
       $files = scandir($this->fileName);
-      echo "Scanning directory $this->fileName ...";
       foreach ( $files as $file ) {
          if ( in_array($file,File::$filesToIgnore) ) continue;
          $return []= new File ($this->fileName.DIRECTORY_SEPARATOR.$file);
       }
-      echo " ".count($return)." items found.\n";
+      echo "Found ".count($return)." items found in $this->fileName .\n";
       $this->directoryContents = $return;
       return $return;
    }
