@@ -120,10 +120,6 @@ class File {
          $return []= new File ($this->fileName.DIRECTORY_SEPARATOR.$file);
       }
       echo "Found ".count($return)." items found in $this->fileName \n";
-      if ( count($return) == 1 ) {
-        print_r($return);
-        die();
-      }
       $this->directoryContents = $return;
       return $return;
    }
