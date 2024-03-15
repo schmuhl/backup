@@ -30,9 +30,11 @@ echo "---------- Photo Folder Summary:\n";
 $stats = $file->getStats(false); //die();
 echo "\n\n";
 
-$pruned = $file->pruneEmptyDirectories();
-$organized = $file->organize();
-$duplicates = $file->handleDuplicates();
+
+// Execute!
+if ( File::$prune ) $pruned = $file->pruneEmptyDirectories(); else $pruned = 0;
+if ( File::$move ) $organized = $file->organize(); else $organized = 0;
+if ( File::$duplicates ) $duplicates = $file->handleDuplicates(); else $duplicates = 0;
 
 
 
@@ -56,7 +58,7 @@ class File {
 
   public static $home;
   public static $filesToIgnore = array('.','..','organizePhotos.php','.git');
-  public static $filesToDelete = array('desktop.ini','.DS_Store','.picasa.ini','.picasa 2.ini','Picasa.ini','Picasa 2.ini');
+  public static $filesToPrune = array('desktop.ini','.DS_Store','.picasa.ini','.picasa 2.ini','Picasa.ini','Picasa 2.ini');
   public static $move = false;
   public static $prune = false;
   public static $resolveDuplicates = false;
@@ -120,11 +122,12 @@ class File {
    public function getDirectoryContents () {
       $return = array();
       $files = scandir($this->fileName);
-      //echo "Getting directory contents of $this->fileName...\n";
+      echo "Scanning directory $this->fileName ...";
       foreach ( $files as $file ) {
          if ( in_array($file,File::$filesToIgnore) ) continue;
          $return []= new File ($this->fileName.DIRECTORY_SEPARATOR.$file);
       }
+      echo " ".count($return)." items found.\n";
       $this->directoryContents = $return;
       return $return;
    }
@@ -137,7 +140,7 @@ class File {
       $f = explode(DIRECTORY_SEPARATOR,$this->fileName);
       $f = $f[count($f)-1];
       //die("File is $f");
-      if ( in_array($f,File::$filesToDelete) ) {
+      if ( in_array($f,File::$filesToPrune) ) {
         if ( File::$prune ) {
           echo "\tRemoving file $f ...";
           if ( $this->delete(false) ) {
@@ -198,7 +201,7 @@ class File {
         // check if this is a file that should have been deleted or ignored
         $file = explode(DIRECTORY_SEPARATOR,$this->fileName);
         $file = $file[count($file)-1];
-        if ( in_array($file,File::$filesToDelete) || in_array($file,File::$filesToIgnore) ) {
+        if ( in_array($file,File::$filesToPrune) || in_array($file,File::$filesToIgnore) ) {
           echo "Organizing $this->fileName and skipping because it should be deleted or ignored.\n";
           return 0;
         }
