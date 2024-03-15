@@ -120,6 +120,10 @@ class File {
          $return []= new File ($this->fileName.DIRECTORY_SEPARATOR.$file);
       }
       echo "Found ".count($return)." items found in $this->fileName \n";
+      if ( count($return) == 1 ) {
+        print_r($return);
+        die();
+      }
       $this->directoryContents = $return;
       return $return;
    }
@@ -130,7 +134,6 @@ class File {
 
     // prune recursively first
     if ( $this->type == 'dir' ) {
-
       foreach ( $this->directoryContents as $f ) {
         $pruned += $f->prune();
       }
