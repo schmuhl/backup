@@ -115,11 +115,12 @@ class File {
    public function getDirectoryContents () {
       $return = array();
       $files = scandir($this->fileName);
+      natcasesort($files);
       foreach ( $files as $file ) {
          if ( in_array($file,File::$filesToIgnore) ) continue;
          $return []= new File ($this->fileName.DIRECTORY_SEPARATOR.$file);
       }
-      echo "Found ".count($return)." items in $this->fileName \n";
+      //echo "Found ".count($return)." items in $this->fileName \n";
       $this->directoryContents = $return;
       return $return;
    }
@@ -149,10 +150,8 @@ class File {
           } else echo " this is not a valid directory.\n";
         } else echo " NOT pruned.\n";
       }
-
       return $pruned;
     }
-
 
     // attempt to remove unwanted files
     if ( $this->type != 'dir' ) {
@@ -174,7 +173,6 @@ class File {
           return 0;
         }
       }
-
       //echo "\t$this->fileName file found!\n";
       return 0;
     }
