@@ -22,21 +22,13 @@ else File::$prune = false;
 if ( in_array('-duplicates',$argv) ) File::$resolveDuplicates = true; // are we allowed to de-dup?
 else File::$resolveDuplicates = false;
 
-echo "Scanning '".File::$home."' ...\n";
-$file = new File ( File::$home );
-//print_r($file); die();
-
-echo "---------- Photo Folder Summary:\n";
-$stats = $file->getStats(false); //die();
-echo "\n\n";
-
 
 // Execute!
-if ( File::$prune ) $pruned = $file->pruneEmptyDirectories(); else $pruned = 0;
+echo "Scanning '".File::$home."' ...\n";
+$file = new File ( File::$home );
+if ( File::$prune ) $pruned = $file->prune(); else $pruned = 0;
 if ( File::$move ) $organized = $file->organize(); else $organized = 0;
 if ( File::$resolveDuplicates ) $duplicates = $file->handleDuplicates(); else $duplicates = 0;
-
-
 
 
 // summary
@@ -45,6 +37,7 @@ echo "$organized files were organized.\n";
 echo "$duplicates duplicate files were resolved.\n";
 echo File::$deletedFiles." unnecessary files were pruned.\n";
 echo "$pruned empty folders were removed.\n";
+$stats = $file->getStats(true);
 echo "There were    ".$stats['files'].' files in '.$stats['directories']." directories.\n";
 if ( File::$move ) { // only meaningful if changes were made
   $file2 = new File ( File::$home );
@@ -126,13 +119,42 @@ class File {
          if ( in_array($file,File::$filesToIgnore) ) continue;
          $return []= new File ($this->fileName.DIRECTORY_SEPARATOR.$file);
       }
-      echo "Found ".count($return)." items found in $this->fileName .\n";
+      echo "Found ".count($return)." items found in $this->fileName \n";
       $this->directoryContents = $return;
       return $return;
    }
 
 
-  public function pruneEmptyDirectories () {
+  public function prune () {
+    $pruned = 0;
+
+    // prune recursively first
+    if ( $this->type == 'dir' ) {
+
+      foreach ( $this->directoryContents as $f ) {
+        $pruned += $f->prune();
+      }
+
+      // Attempt to prune this directory
+      $this->getDirectoryContents();
+
+      if ( count($this->directoryContents) <= 0 ) {
+        echo "Pruning directory $this->fileName ...";
+        if ( File::$prune ) {
+          if ( is_dir($this->fileName) && $this->fileName != './' && $this->fileName != File::$home ) {
+            if ( !rmdir($this->fileName) ) echo " FAILED!\n";
+            else {  // successfully removed empty directory
+              echo " done.\n";
+              return 1;
+            }
+          } else echo " this is not a valid directory.\n";
+        } else echo " NOT pruned.\n";
+      }
+
+      return $pruned;
+    }
+
+
     // attempt to remove unwanted files
     if ( $this->type != 'dir' ) {
       // is this a file we don't want?
@@ -145,7 +167,7 @@ class File {
           if ( $this->delete(false) ) {
             File::$deletedFiles++;
             echo " done.\n";
-            return 0;
+            return 1;
           }
           else echo " ERROR!\n";
         } else {
@@ -156,30 +178,6 @@ class File {
 
       //echo "\t$this->fileName file found!\n";
       return 0;
-    }
-
-    // recurse
-    $hasFiles = 0;
-    foreach ( $this->directoryContents as $f ) {
-      $hasFiles += $f->pruneEmptyDirectories();
-      //echo "\t$file->fileName\n";
-    }
-
-    // Attempt to prune this direcotry
-    //if ( $hasFiles > 0 ) echo "$this->fileName has $hasFiles files and cannot be pruned.\n";
-    if ( $hasFiles <= 0 ) {
-      if ( is_array($this->directoryContents) && count($this->directoryContents) > 0 ) return $hasFiles;  // can't delete a directory with stuff in it!
-      echo "Pruning $this->fileName ...";
-      if ( File::$prune ) {
-        if ( is_dir($this->fileName) && $this->fileName != './' ) {
-          if ( !rmdir($this->fileName) ) echo " FAILED!\n";
-          else {  // successfully removed empty directory
-            //File::$deletedDirectories++;
-            echo " done.\n";
-            return 1;
-          }
-        } else echo " this is not a directory.\n";
-      } else echo " NOT pruned.\n";
     }
 
     return 0;
