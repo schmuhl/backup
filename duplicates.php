@@ -111,13 +111,10 @@ function analyzeFiles($output_json_file, $verbose=false, $removeDuplicates=false
           $duplicate_sizes[$file->size][$i]->checksum = calculateChecksum($file->path);
         }
         if ( !isset($duplicate_sizes[$file->size][$i]->type) || empty($duplicate_sizes[$file->size][$i]->type) ) {
-          $duplicate_sizes[$file->size][$i]->type = mime_content_type($file->path);
-        }
-        if ( !isset($duplicate_sizes[$file->size][$i]->type) || empty($duplicate_sizes[$file->size][$i]->type) ) {
-          $duplicate_sizes[$file->size][$i]->type = mime_content_type($file->path);
+          $duplicate_sizes[$file->size][$i]->type = @mime_content_type($file->path);
         }
         if ( !isset($duplicate_sizes[$file->size][$i]->time) || empty($duplicate_sizes[$file->size][$i]->time) ) {
-          $duplicate_sizes[$file->size][$i]->time = date("Y-m-d H:i:s",filectime($file->path));
+          $duplicate_sizes[$file->size][$i]->time = date("Y-m-d H:i:s",@filectime($file->path));
         }
       }
     }
@@ -169,7 +166,7 @@ function analyzeFiles($output_json_file, $verbose=false, $removeDuplicates=false
     if ( $verbose ) echo "\n\n";
   }
 
-  if ( $removeDuplicates ) echo "Removed $removedFiles duplicate files.\n";
+  if ( $removeDuplicates ) echo "Removed ".number_format($removedFiles)." duplicate files.\n";
   return $removedFiles;
 }
 
@@ -227,7 +224,7 @@ function scanDirectory($directory, $output_json_file, $verbose=false, $removeEmp
         $emptyDirectories ++;
         if ( $verbose ) echo "Empty Directory: ".$directory;
         if ( $removeEmptyDirectories ) {
-          if ( rmdir($directory) ) {
+          if ( @rmdir($directory) ) {
             if ( $verbose ) echo "✓ REMOVED ";
             $directoriesRemoved++;
           } else {
