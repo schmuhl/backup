@@ -50,7 +50,7 @@ if ( File::$move ) { // only meaningful if changes were made
 class File {
 
   public static $home;
-  public static $filesToIgnore = array('.','..','organizePhotos.php','.git');
+  public static $filesToIgnore = array('.','..','organize.php','.git');
   public static $filesToPrune = array('desktop.ini','.DS_Store','._.DS_Store','.picasa.ini','.picasa 2.ini','Picasa.ini','Picasa 2.ini','Thumbs.db');
   public static $move = false;
   public static $prune = false;
@@ -182,6 +182,9 @@ class File {
 
 
    public function organize () {
+     /**
+     @todo this needs to be limited to JUST IMAGES, right? audio should be organized by artist/album 
+     */
       $num = 0;
       if ( $this->type == 'dir' ) { // directory? then recurse!
         if ( $this->fileName == FILE::$home.DIRECTORY_SEPARATOR.'Trash' ) return 0; // don't process the trash
